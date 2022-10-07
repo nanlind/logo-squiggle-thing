@@ -1,0 +1,38 @@
+{
+  "name": "p5.serialserver",
+  "version": "0.0.34",
+  "description": "A serial server for p5.serialport.js",
+  "author": "Shawn Van Every <Shawn.Van.Every@nyu.edu>, Jiwon Shin <jiwon.shin@nyu.edu>",
+  "main": "./src/p5.serialserver.js",
+  "bin": {
+    "p5serial": "./startserver.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/p5-serial/p5.serialserver"
+  },
+  "bugs": {
+    "url": "https://github.com/p5-serial/p5.serialserver/issues"
+  },
+  "keywords": [
+    "serial",
+    "p5.js",
+    "arduino"
+  ],
+  "dependencies": {
+    "serialport": "^9.2.8",
+    "ws": "^7.0"
+  },
+  "license": "GPL",
+  "devDependencies": {
+    "babel-minify": "^0.5.2",
+    "browserify": "^17.0.0",
+    "jsdoc": "^3.6.3",
+    "watchify": "^4.0.0"
+  },
+  "scripts": {
+    "doc": "jsdoc -c jsdoc.conf.json",
+    "build": "browserify src/index.js -s p5.serialserver -r | minify > dist/p5.serialserver.min.js",
+    "watch": "watchify src/index.js -s p5.serialserver -o dist/p5.serialserver.js"
+  }
+}
