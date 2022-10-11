@@ -21,6 +21,16 @@ let reflectNodes = {
 };
 let pointer;
 
+// Serial I/O
+let port;
+let reader;
+let inputDone;
+let inputStream;
+
+let textInput = "";
+let textInputLen = 0;
+let serialObjects = [];
+
 let printAnchors = false;
 let doLinearTranslate = false;
 let doChainTranslate = false;
@@ -34,10 +44,9 @@ let stepz = 0;
 let stepzCount = 0;
 
 
-let port, reader, writer;
 
 async function setup() {
-  canvas = createVector(1200, 1200);
+  canvas = createVector(700, 700);
   createCanvas(canvas.x, canvas.y);
 
   useFixedAnchorPs();
@@ -78,12 +87,10 @@ function draw() {
   let fps = round(random(6, 12));
   // frameRate(fps);
   frameRate(6);
-  // frameRate(2);
   background("#fcf");
 
   arrowIsDown();
-
-
+  drawWithSensors(textInput);
 
   if (!drawSquiggle) {
     chainTranslateNodes(anchorP, 3);
@@ -105,32 +112,26 @@ function draw() {
       drawInterpolations(anchorP);
       drawOuterBorderRadius();
       drawControlPoints(anchorP);
-
     }
-    // if (anchorP.length > 1) {
-
-    // }
-
   } else if (!drawSquiggle) {
     getTangents(anchorP);
     drawInterpolations(anchorP);
     drawOuterBorderRadius();
     drawControlPoints(anchorP);
-
   }
 
 
 
   noFill();
-
   drawCurve();
   // if (!drawSquiggle) {
-
   //   drawControlPoints();
   // }
   drawAnchorPs();
 
-  drawCustomSquiggle();
+  if (drawSquiggle) {
+    showDrawingBrush();
+  }
 
 
   if (!drawSquiggle) {
@@ -145,23 +146,14 @@ function draw() {
     circle(anchorP[reflectNodes.start + reflectNodes.num + 1].x, anchorP[reflectNodes.start + reflectNodes.num + 1].y, 7);
     fill("orange");
   }
-
-
-  console.log("newCoords: ", newCoords);
 }
 
-function drawCustomSquiggle() {
-
-  if (!drawSquiggle) {
-    return;
-  }
-
+function showDrawingBrush() {
   noStroke();
   fill(50);
   square(pointer.x, pointer.y, squareSize, 7);
   fill(230);
   circle(pointer.x, pointer.y, 6);
-
 }
 
 function moveReflectNodes() {
@@ -890,10 +882,128 @@ function startNewRound() {
 }
 
 // ------------------------------------------------
+// ----------------- SERIAL I/O -------------------
+// ------------------------------------------------
+
+async function readLoop() {
+  try {
+    // Listen to data coming from the serial device.
+    while (true) {
+      // // Done = true if serial port has been closed or no more data coming in. 
+
+      const { value: chunk, done } = await reader.read();
+
+      if (chunk) {
+        textInput += chunk;
+      }
+
+      // Allow the serial port to be closed later.
+      if (done) {
+        console.log("[readLoop] DONE: " + done);
+        reader.releaseLock();
+        break;
+      }
+    }
+
+  } catch (e) {
+    console.error(e);
+  }
+  finally {
+    reader.releaseLock();
+  }
+}
+
+
+// ------------------------------------------------
 // ----------------- INTERACTIVE ------------------
 // ------------------------------------------------
 
+function serialToJSON(inputString) {
 
+  // Make string to array by splitting at this char: '{'
+  let sensor_objs = inputString.split(/(?={)/g);
+
+  // Is last char in inputString a '}' ? If yes, obj is complete, else remove last elm from array. 
+  if (inputString[inputString.length - 1] !== "}") {
+    textInput = sensor_objs.pop();
+  } else {
+    textInput = "";
+  }
+
+  let sensor_objs_json = sensor_objs.map(obj => {
+    try {
+      return JSON.parse(obj);
+    } catch (e) {
+      console.error("Could not parse string to JSON");
+      console.error(e);
+    }
+  });
+
+  return sensor_objs_json;
+}
+
+
+function drawWithSensors() {
+  if (textInput.length !== textInputLen) {
+
+    let input_json = serialToJSON(textInput);
+    serialObjects.push(...input_json)
+    textInputLen = textInput.length;
+  }
+
+  while (serialObjects.length > 0) {
+    let first_in_queue = serialObjects.shift();
+
+    let direction = first_in_queue.direction;
+    moveDrawPointer(direction);
+
+  }
+}
+
+
+// Replace with serial input
+function moveDrawPointer(direction) {
+  let stepSize = 20;
+
+  switch (direction) {
+    case 'u':
+      pointer = createVector(pointer.x, pointer.y - stepSize);
+      break;
+    case 'u-r':
+      pointer = createVector(pointer.x + stepSize, pointer.y - stepSize);
+      break;
+
+    case 'r':
+      pointer = createVector(pointer.x + stepSize, pointer.y);
+      break;
+
+    case 'd-r':
+      pointer = createVector(pointer.x + stepSize, pointer.y + stepSize);
+      break;
+
+    case 'd':
+      pointer = createVector(pointer.x, pointer.y + stepSize);
+      break;
+
+    case 'd-l':
+      pointer = createVector(pointer.x - stepSize, pointer.y + stepSize);
+      break;
+
+    case 'l':
+      pointer = createVector(pointer.x - stepSize, pointer.y);
+      break;
+
+    case 'u-l':
+      pointer = createVector(pointer.x - stepSize, pointer.y - stepSize);
+      break;
+
+    default:
+      break;
+  }
+}
+
+
+// Replace with serial input
 function arrowIsDown() {
   let stepSize = 20;
 
@@ -911,11 +1021,9 @@ function arrowIsDown() {
   if (keyIsDown(LEFT_ARROW)) {
     pointer = createVector(pointer.x - stepSize, pointer.y);
   }
-
-
 }
 
-function keyPressed() {
+async function keyPressed() {
   if (key == 'p') {
     doLinearTranslate = true;
     // run this each time newCoord or selects change
@@ -964,6 +1072,43 @@ function keyPressed() {
     anchorP = [];
     console.log("drawSquiggle = true...");
 
+
+    console.log("opening port...");
+    port = await navigator.serial.getPorts();
+
+    if (port && port.length > 0 && Array.isArray(port)) {
+      port = port[0];
+    } else {
+      // Filter on devices with the Arduino Uno USB Vendor/Product IDs.
+      const filters = [
+        { usbVendorId: 0x2341, usbProductId: 0x0043 },
+      ];
+      port = await navigator.serial.requestPort({ filters });
+    }
+
+    console.log(port);
+
+    // // Wait for the serial port to open.
+    try {
+      await port.open({ baudRate: 9600 });
+    } catch (e) {
+      console.error("Could not open port");
+      console.error(e);
+      return;
+    }
+
+    // // // // // // // // // // // 
+
+    let decoder = new TextDecoderStream();
+    inputDone = port.readable.pipeTo(decoder.writable);
+    inputStream = decoder.readable;
+
+    reader = inputStream.getReader();
+    readLoop();
+
+    // // // // // // // // // // // 
+
+
     /*
     Ide til senere:
     når a trykkes, så samles alle nodene til samme punkt 
@@ -973,6 +1118,10 @@ function keyPressed() {
   if (key == 'd') {
     // draw done & jiggle / capture img
     drawSquiggle = false;
+    keepReading = false;
+    if (port) {
+      await port.close();
+    }
 
     console.log("drawSquiggle = false...");
   }
