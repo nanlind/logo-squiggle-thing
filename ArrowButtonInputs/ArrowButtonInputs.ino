@@ -103,38 +103,35 @@ String getDirection(int id) {
 
   switch (id) {
     case 2:
-      return("up");
+      return("u");
 
     case 6:
-      return("up right");
+      return("u-r");
 
     case 4:
-    return("right");
+    return("r");
 
     case 12:
-    return("down right");
+    return("d-r");
 
     case 8:
-    return("down");
+    return("d");
 
 
     case 24:
-    return("down left");
+    return("d-l");
 
     case 16:
-    return("left");
+    return("l");
 
     case 18:
-    return("up left");
+    return("u-l");
 
     default:
       break;
   }
 }
 void printDirection(int id) {
-  // Serial.print("Direction:     ");
-  // Serial.println(id);
-
   switch (id) {
     case 2:
       Serial.println("UP");
