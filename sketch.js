@@ -982,10 +982,6 @@ function keyPressed() {
     anchorP.push(createVector(pointer.x, pointer.y));
     console.log("Pushed pointer to anchorP...");
   }
-
-
-
-
   if (key == '1') {
     let mouse = createVector(mouseX, mouseY);
     newCoords[0] = isFalsy(newCoords[0]) ? mouse : null;
