@@ -1,5 +1,8 @@
 /*jshint esversion: 9 */
-
+import "./interaction.js";
+import "./functions.js";
+import "./canvas.js";
+import "./points.js";
 
 let canvas;
 let stepSize = 30;
@@ -43,37 +46,43 @@ let squareSize = 60;
 let stepz = 0;
 let stepzCount = 0;
 
+// objects
+let p;
+
 
 
 async function setup() {
-  canvas = createVector(700, 700);
+
+  canvas = new Canvas(600, 600);
+  bgImg = loadImage(canvas.backgroundImg[0]);
   createCanvas(canvas.x, canvas.y);
 
-  useFixedAnchorPs();
+  p = new Points();
+
+  // p.anchors = p.populateAnchorPoints(); //possibly dupe. Blir satt i Points-konstruktøren
+  anchorP = p.anchors; // TODO:: kan anchorP fjernes og p.anchors brukes i stedet?
+
+  // p.controls = p.calculateControlPoints(p.anchors);
+
+  // canvas = createVector(config.canvasSize.x, config.canvasSize.y);
+
+
+  // TODO:: Comment out what you dont use / what is successfully transferred
+  // useFixedAnchorPs();
   anchorP2 = [...anchorP];
-  getTangents(anchorP);
+  // getTangents(anchorP);
   controlP2 = [...controlP];
 
-  background("#cfc");
+  background(canvas.bgColor);
 
   // Init new coordination points
   selects.map(s => {
     newCoords.push(null);
   });
+  // TODO:: What does this do?
   pointer = createVector(140, 140);
 }
 
-function useFixedAnchorPs() {
-  anchorP.push(createVector(140, 140));
-  anchorP.push(createVector(80, 240));
-  anchorP.push(createVector(90, 290));
-  anchorP.push(createVector(390, 90));
-  anchorP.push(createVector(480, 390));
-  anchorP.push(createVector(90, 490));
-  anchorP.push(createVector(290, 390));
-  anchorP.push(createVector(340, 240));
-
-}
 
 
 // ------------------------------------------------
@@ -85,49 +94,57 @@ function draw() {
   angleMode(DEGREES);
 
   let fps = round(random(6, 12));
-  // frameRate(fps);
-  frameRate(6);
-  background("#fcf");
+  frameRate(fps);
 
+  // background(bgImg);
+  background("#fff");
+
+
+  // ------------------------------------------------------------------------------
   arrowIsDown();
   drawWithSensors(textInput);
 
+  getTangents(anchorP);
+
+
   if (!drawSquiggle) {
-    chainTranslateNodes(anchorP, 3);
-    chainTranslateNodes(anchorP, 2);
-    chainTranslateNodes(anchorP, 1);
-    chainTranslateNodes(anchorP, 0);
+    // chainTranslateNodes(anchorP, 3);
+    // chainTranslateNodes(anchorP, 2);
+    // chainTranslateNodes(anchorP, 1);
+    // chainTranslateNodes(anchorP, 0);
     translateNodes();
     moveReflectNodes();
   }
   if (drawSquiggle && !!anchorP.length) {
     if (anchorP[anchorP.length - 1].x !== pointer.x || anchorP[anchorP.length - 1].y !== pointer.y) {
       let anchors = [...anchorP, pointer];
-      getTangents(anchors);
+      // getTangents(anchors);
       drawInterpolations(anchors);
       drawOuterBorderRadius();
       drawControlPoints(anchors);
     } else if (anchorP.length > 1) {
-      getTangents(anchorP);
+      // getTangents(anchorP);
       drawInterpolations(anchorP);
       drawOuterBorderRadius();
       drawControlPoints(anchorP);
     }
   } else if (!drawSquiggle) {
-    getTangents(anchorP);
+    // getTangents(anchorP);
     drawInterpolations(anchorP);
     drawOuterBorderRadius();
     drawControlPoints(anchorP);
   }
 
-
-
   noFill();
-  drawCurve();
+  // CURVE 
+  // drawCurve();
+
+
   // if (!drawSquiggle) {
   //   drawControlPoints();
   // }
   drawAnchorPs();
+
 
   if (drawSquiggle) {
     showDrawingBrush();
@@ -291,9 +308,6 @@ function dott(x, y) {
 // ---------------- CALCULATIONS ------------------
 // ------------------------------------------------
 
-
-
-
 function getTangents(anchors) {
 
   controlP = [];
@@ -343,19 +357,37 @@ function getTangents(anchors) {
 
       let theta_avg = (theta.prev + theta.after) / 2;
 
-      // let rFactor = 0.33;
-
+      // Setter current som et midlertidig origo.
+      // kartesisk vektor fra origo = n-1 -> n
       let dist1 = diffCurrentAndAfter(anchors, i - 1);
-      let r1 = cartesianToPolarRadius(dist1.x, dist1.y) * radiusFactor;
-
+      // kartesisk vektor fra origo = n -> n + 1
       let dist2 = diffCurrentAndAfter(anchors, i);
+
+      //  Regner ut hypotenusen som er det samme som radius / (fly)avstand mellom nodene 
+      // Avstand til forrige
+      let r1 = cartesianToPolarRadius(dist1.x, dist1.y) * radiusFactor;
+      // Avstand til neste
       let r2 = cartesianToPolarRadius(dist2.x, dist2.y) * radiusFactor;
 
+      // Skrur det tilbake til vanlig kartesisk koordinater. 
+      // Avstand og vinkel til forrige
+      // let cpp1 = polarToCartesian(theta.prev, r1);
       let cpp1 = polarToCartesian(theta_avg, r1);
+      // Avstand og vinkel til neste
+      // let cpp2 = polarToCartesian(theta.after, r2);
       let cpp2 = polarToCartesian(theta_avg, r2);
 
+      // cp1 og cp2 - kontrollpunkter på hver side av noden. 
       let cp1 = createVector(anchors[i].x - cpp1.x, anchors[i].y - cpp1.y);
       let cp2 = createVector(anchors[i].x + cpp2.x, anchors[i].y + cpp2.y);
+
+      strokeWeight(2);
+
+      stroke("yellow");
+      line(cp1.x, cp1.y, anchors[i].x, anchors[i].y);
+      stroke("green");
+      line(cp2.x, cp2.y, anchors[i].x, anchors[i].y);
+      strokeWeight(1);
 
       controlP.push([cp1, cp2]);
 
@@ -363,6 +395,7 @@ function getTangents(anchors) {
   }
 
   controlP[0] = getTangent(anchors, 0);
+
 }
 
 function getTangent(anchors, i) {
@@ -544,8 +577,6 @@ function drawInterpolations(anchorPoints) {
     let t_length = estimatedDistance * 10.1;
     let steps = round(t_length / overlap);
 
-
-
     let prevPoint = anchorPoints[i];
 
     drawInterpolationPoint(anchorPoints[i].x, anchorPoints[i].y);
@@ -607,14 +638,14 @@ function drawInterpolationPoint(x, y) {
 
 
   // fill(stepzCount * 10);
-  fill(0);
+  // SQUARE COLOR HERE
+  fill(240, 140, 140, 80);
+  // fill("#fc0fc0");
   square(x, y, squareSize, 7);
 
 }
 
 function chainTranslateNodes(anchorPoints, i) {
-
-
   if (!doChainTranslate) {
 
     let len = dist(anchorPoints[i].x, anchorPoints[i].y, anchorPoints[i + 1].x, anchorPoints[i + 1].y);
@@ -947,7 +978,7 @@ function drawWithSensors() {
   if (textInput.length !== textInputLen) {
 
     let input_json = serialToJSON(textInput);
-    serialObjects.push(...input_json)
+    serialObjects.push(...input_json);
     textInputLen = textInput.length;
   }
 
@@ -1066,8 +1097,8 @@ async function keyPressed() {
     doChainTranslate = false;
   }
 
+  // Draw: clear canvas & show pointer
   if (key == 'a') {
-    // draw / clear canvas & show pointer
     drawSquiggle = true;
     anchorP = [];
     console.log("drawSquiggle = true...");
@@ -1076,15 +1107,16 @@ async function keyPressed() {
     console.log("opening port...");
     port = await navigator.serial.getPorts();
 
-    if (port && port.length > 0 && Array.isArray(port)) {
-      port = port[0];
-    } else {
-      // Filter on devices with the Arduino Uno USB Vendor/Product IDs.
-      const filters = [
-        { usbVendorId: 0x2341, usbProductId: 0x0043 },
-      ];
-      port = await navigator.serial.requestPort({ filters });
-    }
+
+    // if (port && port.length > 0 && Array.isArray(port)) {
+    //   port = port[0];
+    // } else {
+    // // Filter on devices with the Arduino Uno USB Vendor/Product IDs.
+    const filters = [
+      { usbVendorId: 0x2341, usbProductId: 0x0043 },
+    ];
+    port = await navigator.serial.requestPort({ filters });
+    // }
 
     console.log(port);
 
@@ -1152,3 +1184,11 @@ function isFalsy(isTrue) {
 //  Hvis problemer med distribusjon av firkantentene. 
 //  Så er mulig løsning her: 
 //  https://gamedev.stackexchange.com/questions/5373/moving-ships-between-two-planets-along-a-bezier-missing-some-equations-for-acce
+
+
+function print(printMe) {
+  console.log(printMe.toString());
+}
+function printSize(printMe) {
+  console.log(printMe.length);
+}

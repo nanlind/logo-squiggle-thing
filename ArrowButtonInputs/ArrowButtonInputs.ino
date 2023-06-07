@@ -1,23 +1,25 @@
 #include <ArduinoJson.hpp>
 #include <ArduinoJson.h>
+#include <CapacitiveSensor.h>
 
-
-// constants won't change. They're used here to set pin numbers:
 const int button_up = 10;  // the number of the pushbutton pin
 const int button_right = 8;
 const int button_down = 7;
 const int button_left = 5;
 const int button_start = 3;
 const int button_end = 2;
-// const int analog_0 = A0;
+
+CapacitiveSensor cs_4_2 = CapacitiveSensor(4, 2);    // 10M resistor between pins 4 & 2, pin 2 is sensor pin, add a wire and or foil if desired
+CapacitiveSensor cs_4_6 = CapacitiveSensor(4, 6);    // 10M resistor between pins 4 & 6, pin 6 is sensor pin, add a wire and or foil
+CapacitiveSensor cs_4_8 = CapacitiveSensor(4, 8);    // 10M resistor between pins 4 & 8, pin 8 is sensor pin, add a wire and or foil
+CapacitiveSensor cs_4_12 = CapacitiveSensor(4, 11);  // 10M resistor between pins 4 & 8, pin 12 is sensor pin, add a wire and or foil
 
 int id;
-
 String val;
 
 int draw_start = LOW;
 int draw_end = LOW;
-int buttonState[4] = { LOW, LOW, LOW, LOW};       // variable for reading the pushbutton status
+int buttonState[4] = { 0, 0, 0, 0};       // variable for reading the pushbutton status
 String directions[] = { "UP", "RIGHT", "DOWN", "LEFT" };  // variable for reading the pushbutton status
 // int a_sensor = 0;
 
@@ -25,38 +27,37 @@ String output;
 
 void setup() {
   Serial.begin(9600);
-  // initialize the pushbutton pin as an input:
-  pinMode(button_up, INPUT);
-  pinMode(button_right, INPUT);
-  pinMode(button_down, INPUT);
-  pinMode(button_left, INPUT);
-  // pinMode(button_start, INPUT);
-  // pinMode(button_end, INPUT);
-
-  pinMode(13, OUTPUT);
 
   id = 0;
 
+  // initialize the pushbutton pin as an input:
+  // pinMode(button_start, INPUT);
+  // pinMode(button_end, INPUT);
 }
 
 void loop() {
 
  StaticJsonDocument<48> doc;
 
+  long start = millis();
+
+  long capValues[4];
+  capValues[0] = cs_4_2.capacitiveSensor(30);
+  capValues[1] = cs_4_6.capacitiveSensor(30);
+  capValues[2] = cs_4_8.capacitiveSensor(30);
+  capValues[3] = cs_4_12.capacitiveSensor(30);
 
   val = "";
 
-  // read the state of the pushbutton value:
-  buttonState[0] = digitalRead(button_up);
-  buttonState[1] = digitalRead(button_right);
-  buttonState[2] = digitalRead(button_down);
-  buttonState[3] = digitalRead(button_left);
-  draw_start = digitalRead(button_start);
-  draw_end = digitalRead(button_end);
+  // read the state of the button value:
+  for(byte i = 0; i < 4; i++){
+    if(capValues[i] >= 12000){
+      buttonState[i] = 1;
+    } else {
+      buttonState[i] = 0;
+    }
 
-  // a_sensor = analogRead(analog_0);
-  // Serial.println(a_sensor);
-
+  }
 
   int length = sizeof(buttonState) / sizeof(buttonState[0]);
 
@@ -68,7 +69,6 @@ void loop() {
 
       int id = pow(2, i+1) + 0.5;
       sum += id;
-
     } 
   }
 
@@ -93,13 +93,11 @@ void loop() {
     id+=1;
   }
 
-  delay(100);
+  delay(10);
 }
 
 
 String getDirection(int id) {
-  // Serial.print("Direction:     ");
-  // Serial.println(id);
 
   switch (id) {
     case 2:
@@ -131,77 +129,4 @@ String getDirection(int id) {
       break;
   }
 }
-void printDirection(int id) {
-  switch (id) {
-    case 2:
-      Serial.println("UP");
-      break;
 
-    case 6:
-      Serial.println("UP RIGHT");
-      break;
-
-    case 4:
-      Serial.println("RIGHT");
-      break;
-
-    case 12:
-      Serial.println("DOWN RIGHT");
-      break;
-
-    case 8:
-      Serial.println("DOWN");
-      break;
-
-    case 24:
-      Serial.println("DOWN LEFT");
-      break;
-
-    case 16:
-      Serial.println("LEFT");
-      break;
-
-    case 18:
-      Serial.println("UP LEFT");
-      break;
-
-    default:
-      break;
-  }
-}
-void getDiagonal(int idx) {
-  switch (idx) {
-    case 0:
-      Serial.println("UP LEFT");
-      break;
-
-    case 1:
-      Serial.println("UP RIGHT");
-      break;
-
-    case 2:
-      Serial.println("DOWN RIGHT");
-      break;
-
-    case 3:
-      Serial.println("DOWN LEFT");
-      break;
-
-    default:
-      Serial.println("default");
-      break;
-  }
-}
-
-
-void lightUp(){
-
-  digitalWrite(13, HIGH);
-  delay(500);
-  digitalWrite(13,LOW);
-  delay(100);
-  digitalWrite(13, HIGH);
-  delay(100);
-  digitalWrite(13,LOW);
-  delay(100);
-}
