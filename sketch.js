@@ -5,26 +5,21 @@ import "./canvas.js";
 import "./points.js";
 
 let canvas;
-let stepSize = 30; // TODO : Rename to CAPS since its a constant
 
-let roundNum = 0;
-let numSteps = 2;
+// ---------- CONTSTANTS
+const BRUSH_STEP_SIZE = 20;
+const TRANS_STEP_SIZE = 30;
+const SQUARE_SIZE = 60;
 
-// ---------- Arrays
-
+// ---------- ARRAYS
 let anchorP = [];   // Anchor points
-let controlP = [];  // Control points
-let anchorP2 = [];  // used in chainTranslation
-let controlP2 = []; // used in chainTranslation
+let squares = [];
+
 let selects = [2];  // Position of points that will lead translation
 let selectInfo = [];
 let newCoords = []; // New coordinates for nodes in selects[]. Same size as selects[]
-let reflectNodes = {
-  start: 1,
-  num: 5,
-  newCoords: []
-}; // For reflect-translation - Not finished. 
-let pointer;        // Coordinates of brush (for drawing Squiggle) TODO:: Rename to brush
+
+let brushPos;        // Coordinates of brush (for drawing Squiggle) TODO:: Rename to brush
 
 // -------- Serial I/O
 let port;
@@ -37,21 +32,35 @@ let textInputLen = 0;
 let serialObjects = [];
 
 // ---------- Booleans
-let printAnchors = false;
 let doLinearTranslate = false;
-let doChainTranslate = false;
-let doReflect = false;
 let drawSquiggle = false;
 
-// -----------
-let squares = [];
-let squareSize = 60;
+// ----------- 
+let numSteps = 2; // Number of steps an arbitrary round consists of. 
 
 let stepz = 0;
 let stepzCount = 0;
 
 // objects
 let p;
+
+//  
+// ----------- Troubleshooting
+let printAnchors = false;
+let roundNum = 0; // Number of completed node travels
+
+
+// ----------- Experimental
+let doChainTranslate = false;
+let anchorP2 = [];  // used in chainTranslation
+let controlP2 = []; // used in chainTranslation
+
+let doReflect = false;
+let reflectNodes = {
+  start: 1,
+  num: 5,
+  newCoords: []
+}; // For reflect-translation - Not finished. 
 
 
 
@@ -62,20 +71,20 @@ async function setup() {
   createCanvas(canvas.x, canvas.y);
   background(canvas.bgColor);
 
+  // -------- -------- -------- -------- -------- -------- 
   p = new Points();
   anchorP = p.anchors; // TODO:: kan anchorP fjernes og p.anchors brukes i stedet?
 
   anchorP2 = [...anchorP];
-  controlP2 = [...controlP];
+  controlP2 = []; // controlP er tom her, så kanskje bare sette til tom array?
 
   // Init new coordination points array
   selects.map(s => {
     newCoords.push(null);
   });
 
-  pointer = createVector(140, 140); // Set initial position for brush
+  brushPos = createVector(140, 140); // Set initial position for brush
 }
-
 
 
 // ------------------------------------------------
@@ -92,65 +101,22 @@ function draw() {
   // background(bgImg);
   background("#fff");
 
-
-  // ------------------------------------------------------------------------------
-  arrowIsDown();
-  drawWithSensors(textInput);
-
-  getTangents(anchorP);
-
-  print(anchorP);
-
+  // -------- -------- -------- -------- -------- -------- 
 
   if (!drawSquiggle) {
-    // chainTranslateNodes(anchorP, 3);
-    // chainTranslateNodes(anchorP, 2);
-    // chainTranslateNodes(anchorP, 1);
-    // chainTranslateNodes(anchorP, 0);
+
+    // -----------------------------  CHAIN TRANSLATION (NOT WORKING)
+    // [3, 2, 1, 0].map(n => {
+    //   chainTranslateNodes(anchorP, n);
+    // });
+
     translateNodes();
     moveReflectNodes();
-  }
-
-  // TODO:: FOrstå testene og hvorfor de utføres. evt om de kan forenkles. 
-  // TODO:: Når skulle anchorP være tom? Ved tegning start? 
-  // TODO:: endre denne til å sette arg. og så kalle på de tre funksjonene én gang med nysatte arg. 
-  if (drawSquiggle && !!anchorP.length) {
-    if (anchorP[anchorP.length - 1].x !== pointer.x || anchorP[anchorP.length - 1].y !== pointer.y) {
-      let anchors = [...anchorP, pointer];
-      // getTangents(anchors);
-      drawInterpolations(anchors);
-      drawOuterBorderRadius();
-      drawControlPoints(anchors);
-    } else if (anchorP.length > 1) { // kan ikke denne fjernes og den andre settes som bare else? 
-      // getTangents(anchorP);
-      drawInterpolations(anchorP);
-      drawOuterBorderRadius();
-      drawControlPoints(anchorP);
-    }
-  } else if (!drawSquiggle) { // hvorfor gjenta !drawSquiggle? Blir ikke denne med uansett pga første kondisjon? 
-    // getTangents(anchorP);
-    drawInterpolations(anchorP);
-    drawOuterBorderRadius();
-    drawControlPoints(anchorP);
-  }
-
-  noFill();
-  // CURVE 
-  // drawCurve();
+    calculateAndShowSquiggle(anchorP);
 
 
-  // if (!drawSquiggle) {
-  // drawControlPoints();
-  // }
-  drawAnchorPs();
-
-
-  if (drawSquiggle) { // Kan denne flyttes opp? 
-    showDrawingBrush();
-  }
-
-
-  if (!drawSquiggle) {
+    // TODO:: What does this do? Is it for the reflectNodes? 
+    /*  
     fill(255);
     reflectNodes.newCoords.map(n => {
 
@@ -161,15 +127,55 @@ function draw() {
     circle(anchorP[reflectNodes.start].x, anchorP[reflectNodes.start].y, 7);
     circle(anchorP[reflectNodes.start + reflectNodes.num + 1].x, anchorP[reflectNodes.start + reflectNodes.num + 1].y, 7);
     fill("orange");
+    */
+  } else { // -----------------------------  DRAW SQUIGGLE
+    arrowPressed();
+    // drawWithSensors(textInput);
+    showDrawingBrush();
+
+
+    if (anchorP.length > 0) {
+      const indexOfLastAnchor = anchorP.length - 1;
+      const lastNodeNotEqualToBrushPosition = anchorP[indexOfLastAnchor].x !== brushPos.x || anchorP[indexOfLastAnchor].y !== brushPos.y;
+
+      if (lastNodeNotEqualToBrushPosition) {
+        const anchorsWithBrushPos = [...anchorP, brushPos];
+        calculateAndShowSquiggle(anchorsWithBrushPos);
+      }
+      else if (anchorP.length > 1) { // kan ikke denne fjernes og den andre settes som bare else? 
+        calculateAndShowSquiggle(anchorP);
+      }
+    }
+
+
   }
+
+
 }
+
+function calculateAndShowSquiggle(anchors) {
+  const controlPoints = getTangents(anchors);
+  drawInterpolations(anchors, controlPoints); // needs controlP
+  drawOuterBorderRadius();
+  drawControlPoints(anchors, controlPoints); // needs controlP
+
+  // -----------------------------  SHOW STUFF FOR DEBUGGING
+  showAnchorPs();
+
+  if (false) {
+    noFill();
+    drawCurve(controlPoints); // needs controlP
+  }
+
+}
+
 
 function showDrawingBrush() {
   noStroke();
   fill(50);
-  square(pointer.x, pointer.y, squareSize, 7);
+  square(brushPos.x, brushPos.y, SQUARE_SIZE, 7);
   fill(230);
-  circle(pointer.x, pointer.y, 6);
+  circle(brushPos.x, brushPos.y, 6);
 }
 
 function moveReflectNodes() {
@@ -234,7 +240,7 @@ function collapsedMatrix(c, s, x, y, p) {
 }
 
 
-function drawCurve() {
+function drawCurve(controlP) {
   beginShape();
   for (let i = 0; i < anchorP.length - 1; i++) {
     if (i === 0) {
@@ -249,7 +255,9 @@ function drawCurve() {
   endShape();
 }
 
-function drawControlPoints(anchors) {
+function drawControlPoints(anchors, controlPoints) {
+
+  let controlP = controlPoints;
 
   if (anchors.length < 2) {
     return;
@@ -270,7 +278,7 @@ function drawControlPoints(anchors) {
   stroke("black");
 }
 
-function drawAnchorPs() {
+function showAnchorPs() {
   for (let i = 0; i < anchorP.length; i++) {
     let x = anchorP[i].x;
     let y = anchorP[i].y;
@@ -283,7 +291,7 @@ function drawAnchorPs() {
 
     if (anchorP.length < 2) {
       fill(0);
-      square(x, y, squareSize, 7);
+      square(x, y, SQUARE_SIZE, 7);
     }
 
 
@@ -314,8 +322,9 @@ function getTangents(anchors) {
     return;
   }
 
-  controlP = [];
+  let controlPoints = [];
   let radiusFactor = 0.4;
+
   for (let i = 0; i < anchors.length; i++) {
     let theta;
 
@@ -333,13 +342,13 @@ function getTangents(anchors) {
       let cp = polarToCartesian(theta.after, r);
       let cp1 = createVector(anchors[i].x + cp.x, anchors[i].y + cp.y);
 
-      controlP.push([0, cp1]);
+      controlPoints.push([0, cp1]);
 
       // Last node
     } else if (i === anchors.length - 1) {
       theta = {
         idx: i,
-        prev: cartesianToPolarTheta(controlP[i - 1][1], anchors[i]),
+        prev: cartesianToPolarTheta(controlPoints[i - 1][1], anchors[i]),
         after: undefined
       };
 
@@ -349,7 +358,7 @@ function getTangents(anchors) {
       let cp = polarToCartesian(theta.prev, r);
       let cp1 = createVector(anchors[i].x - cp.x, anchors[i].y - cp.y);
 
-      controlP.push([cp1, 0]);
+      controlPoints.push([cp1, 0]);
 
       // Middle anchors
     } else {
@@ -393,16 +402,18 @@ function getTangents(anchors) {
       line(cp2.x, cp2.y, anchors[i].x, anchors[i].y);
       strokeWeight(1);
 
-      controlP.push([cp1, cp2]);
+      controlPoints.push([cp1, cp2]);
 
     }
   }
 
-  controlP[0] = getTangent(anchors, 0);
+  controlPoints[0] = getTangent(anchors, 0, controlPoints);
+
+  return controlPoints;
 
 }
 
-function getTangent(anchors, i) {
+function getTangent(anchors, i, controlP) {
 
   if (!anchors.length) {
     return [0, 0];
@@ -452,8 +463,8 @@ function diffCurrentAndAfter(anchors, i) {
 
 function drawOuterBorderRadius() {
 
-  let length = squareSize / 2;
-  let size = round(squareSize / 10);
+  let length = SQUARE_SIZE / 2;
+  let size = round(SQUARE_SIZE / 10);
 
   for (let i = 0; i < squares.length - 1; i++) {
 
@@ -543,7 +554,6 @@ function getR(n1, n2, rad, offset) {
 
 
 function borderRadius(x, y, size, orientation) {
-
   noStroke();
   // fill("red");
 
@@ -568,13 +578,14 @@ function borderRadius(x, y, size, orientation) {
 
 
 // TODO:: If theta is 45 or 135 -> overlap should be smaller
-function drawInterpolations(anchorPoints) {
+// TODO:: Some interpolationPoints t overlap with parent node. Warum?
+function drawInterpolations(anchorPoints, controlPoints) {
 
-  let overlap = squareSize;
+  let controlP = controlPoints;
+  let overlap = SQUARE_SIZE;
   let maxIndex = anchorPoints.length - 1;
 
   squares = [];
-
 
   for (let i = 0; i < maxIndex; i++) {
     let estimatedDistance = dist(anchorPoints[i].x, anchorPoints[i].y, anchorPoints[i + 1].x, anchorPoints[i + 1].y);
@@ -583,7 +594,8 @@ function drawInterpolations(anchorPoints) {
 
     let prevPoint = anchorPoints[i];
 
-    drawInterpolationPoint(anchorPoints[i].x, anchorPoints[i].y);
+    // Tegne hovednodene
+    drawSquare(anchorPoints[i].x, anchorPoints[i].y, [140, 40, 200, 80]);
     squares.push(createVector(anchorPoints[i].x, anchorPoints[i].y));
 
     for (let stepCount = 0; stepCount <= steps; stepCount++) {
@@ -609,47 +621,47 @@ function drawInterpolations(anchorPoints) {
 
       let distance = dist(x, y, prevPoint.x, prevPoint.y);
 
-      if (distance > squareSize - squareSize * 0.1) {
-        // if (distance > squareSize - 10 ) {
+      if (distance > SQUARE_SIZE - SQUARE_SIZE * 0.1) {
+        // Tegne interpolasjonspunktene
+        drawSquare(x, y);
 
-        drawInterpolationPoint(x, y);
         prevPoint = createVector(x, y);
         squares.push(createVector(x, y));
       }
     }
-
-
   }
 }
 
-function drawInterpolationPoint(x, y) {
-  // strokeWeight(1);
-  // noFill();
-
+function drawSquare(x, y, color) {
   strokeWeight(0);
-  // let c = map(i, 0, anchorPoints.length - 1, 200, 0);
-  // fill(c);
-  // fill("yellow");
-  // if (t < 0.2) {
-  //   fill("#6B4B3E");
-  // } else if (t > 0.8) {
 
-  //   fill("#3F826D");
-  // } else {
-
-  //   fill("#D7B377");
-  // }
-
-
-  // fill(stepzCount * 10);
-  // SQUARE COLOR HERE
-  fill(240, 140, 140, 80);
-  // fill("#fc0fc0");
-  square(x, y, squareSize, 7);
+  if (color) {
+    fill(color);
+  } else {
+    fill(240, 140, 140, 80); // Transparent pink
+    // fill("#fc0fc0"); // Hotpink
+  }
+  square(x, y, SQUARE_SIZE, 7);
 
 }
 
-function chainTranslateNodes(anchorPoints, i) {
+// Differentiates based on squareplacement. 
+// Param: t from interpolations.
+function funkyFill(t) {
+  let c = map(i, 0, anchorPoints.length - 1, 200, 0);
+  fill(c);
+  fill("yellow");
+  if (t < 0.2) {
+    fill("#6B4B3E");
+  } else if (t > 0.8) {
+    fill("#3F826D");
+  } else {
+    fill("#D7B377");
+  }
+  fill(stepzCount * 10);
+}
+
+function chainTranslateNodes(anchorPoints, i, controlP) {
   if (!doChainTranslate) {
 
     let len = dist(anchorPoints[i].x, anchorPoints[i].y, anchorPoints[i + 1].x, anchorPoints[i + 1].y);
@@ -758,7 +770,7 @@ function arrIncludesElm(arr, val) {
 function getRandomCoords() {
 
   // let padding = 10;
-  let padding = (squareSize / 2) + 10;
+  let padding = (SQUARE_SIZE / 2) + 10;
 
   let maxWidth = canvas.x - padding;
   let maxHeight = canvas.y - padding;
@@ -825,12 +837,14 @@ function constructNodes(anchorPoints, selects, newPos) {
 
   // Relative stepSize 
   let sInfoWStepSize = selectInfo.map(selected => {
-    numSteps = floor(longest_radius / stepSize);
+    numSteps = floor(longest_radius / TRANS_STEP_SIZE);
     let relativeStepSize = selected.radius / numSteps;
     selected.stepSize = relativeStepSize;
 
     return selected;
   });
+
+  log(sInfoWStepSize[0]);
 
   return sInfoWStepSize;
 }
@@ -998,38 +1012,37 @@ function drawWithSensors() {
 
 // Replace with serial input
 function moveDrawPointer(direction) {
-  let stepSize = 20; // TODO:: Variere global konstant som heter drawStepSize
 
   switch (direction) {
     case 'u':
-      pointer = createVector(pointer.x, pointer.y - stepSize);
+      brushPos = createVector(brushPos.x, brushPos.y - BRUSH_STEP_SIZE);
       break;
     case 'u-r':
-      pointer = createVector(pointer.x + stepSize, pointer.y - stepSize);
+      brushPos = createVector(brushPos.x + BRUSH_STEP_SIZE, brushPos.y - BRUSH_STEP_SIZE);
       break;
 
     case 'r':
-      pointer = createVector(pointer.x + stepSize, pointer.y);
+      brushPos = createVector(brushPos.x + BRUSH_STEP_SIZE, brushPos.y);
       break;
 
     case 'd-r':
-      pointer = createVector(pointer.x + stepSize, pointer.y + stepSize);
+      brushPos = createVector(brushPos.x + BRUSH_STEP_SIZE, brushPos.y + BRUSH_STEP_SIZE);
       break;
 
     case 'd':
-      pointer = createVector(pointer.x, pointer.y + stepSize);
+      brushPos = createVector(brushPos.x, brushPos.y + BRUSH_STEP_SIZE);
       break;
 
     case 'd-l':
-      pointer = createVector(pointer.x - stepSize, pointer.y + stepSize);
+      brushPos = createVector(brushPos.x - BRUSH_STEP_SIZE, brushPos.y + BRUSH_STEP_SIZE);
       break;
 
     case 'l':
-      pointer = createVector(pointer.x - stepSize, pointer.y);
+      brushPos = createVector(brushPos.x - BRUSH_STEP_SIZE, brushPos.y);
       break;
 
     case 'u-l':
-      pointer = createVector(pointer.x - stepSize, pointer.y - stepSize);
+      brushPos = createVector(brushPos.x - BRUSH_STEP_SIZE, brushPos.y - BRUSH_STEP_SIZE);
       break;
 
     default:
@@ -1039,22 +1052,21 @@ function moveDrawPointer(direction) {
 
 
 // Replace with serial input
-function arrowIsDown() {
-  let stepSize = 20;
+function arrowPressed() {
 
   if (keyIsDown(UP_ARROW)) {
-    pointer = createVector(pointer.x, pointer.y - stepSize);
+    brushPos = createVector(brushPos.x, brushPos.y - BRUSH_STEP_SIZE);
   }
   if (keyIsDown(RIGHT_ARROW)) {
-    pointer = createVector(pointer.x + stepSize, pointer.y);
+    brushPos = createVector(brushPos.x + BRUSH_STEP_SIZE, brushPos.y);
 
   }
   if (keyIsDown(DOWN_ARROW)) {
-    pointer = createVector(pointer.x, pointer.y + stepSize);
+    brushPos = createVector(brushPos.x, brushPos.y + BRUSH_STEP_SIZE);
 
   }
   if (keyIsDown(LEFT_ARROW)) {
-    pointer = createVector(pointer.x - stepSize, pointer.y);
+    brushPos = createVector(brushPos.x - BRUSH_STEP_SIZE, brushPos.y);
   }
 }
 
@@ -1077,7 +1089,6 @@ async function keyPressed() {
   }
   if (key == 'r') {
     doLinearTranslate = false;
-
 
     doReflect = true;
     getReflectCoords();
@@ -1105,7 +1116,7 @@ async function keyPressed() {
   if (key == 'a') {
     drawSquiggle = true;
     anchorP = [];
-    console.log("drawSquiggle = true...");
+    console.log("drawSquiggle == true...");
 
 
     /*
@@ -1163,34 +1174,35 @@ async function keyPressed() {
       await port.close();
     }
     */
-    console.log("drawSquiggle = false...");
+    console.log("drawSquiggle == false...");
   }
 
   if (key == 's') {
-    // draw done & jiggle / capture img
-    log(anchorP);
-    log(pointer.x);
-    log(pointer.y);
-    anchorP.push(createVector(pointer.x, pointer.y));
-    log(anchorP);
-    console.log("Pushed pointer to anchorP...");
+    if (!drawSquiggle) {
+      return;
+    }
+    anchorP.push(createVector(brushPos.x, brushPos.y));
+    console.log(`Pushed position: ( ${brushPos.x}, ${brushPos.y}) to anchorP...`);
   }
+
   if (key == '1') {
     let mouse = createVector(mouseX, mouseY);
     newCoords[0] = isFalsy(newCoords[0]) ? mouse : null;
   }
+
   if (key == '2') {
     let mouse = createVector(mouseX, mouseY);
     newCoords[1] = isFalsy(newCoords[1]) ? mouse : null;
   }
+
   if (key == '3') {
     let mouse = createVector(mouseX, mouseY);
     newCoords[2] = isFalsy(newCoords[2]) ? mouse : null;
   }
 }
 
-function isFalsy(isTrue) {
-  return isTrue === undefined || isTrue === null;
+function isFalsy(thingToTest) {
+  return thingToTest === undefined || thingToTest === null;
 }
 
 //  Hvis problemer med distribusjon av firkantentene. 
