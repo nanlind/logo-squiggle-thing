@@ -77,16 +77,28 @@ class Points {
         // Calculates the middle angle between last and previous nodes.
         let theta_avg = (theta.prev + theta.after) / 2;
 
-
+        // Setter current som et midlertidig origo.
+        // kartesisk vektor fra origo = n-1 -> n
         let dist1 = this.diffCurrentAndAfter(anchors, i - 1);
+        //  Regner ut hypotenusen som er det samme som radius / (fly)avstand mellom nodene 
+        // Avstand til forrige
         let r1 = this.cartesianToPolarRadius(dist1.x, dist1.y) * radiusFactor;
 
+        // kartesisk vektor fra origo = n -> n + 1
         let dist2 = this.diffCurrentAndAfter(anchors, i);
+        // Avstand til neste
         let r2 = this.cartesianToPolarRadius(dist2.x, dist2.y) * radiusFactor;
 
+        // Skrur det tilbake til vanlig kartesisk koordinater. 
+        // Avstand og vinkel til forrige
+        // let cpp1 = polarToCartesian(theta.prev, r1);
         let cpp1 = this.polarToCartesian(theta_avg, r1);
+
+        // Avstand og vinkel til neste
+        // let cpp2 = polarToCartesian(theta.after, r2);
         let cpp2 = this.polarToCartesian(theta_avg, r2);
 
+        // cp1 og cp2 - kontrollpunkter på hver side av noden. 
         let cp1 = createVector(anchors[i].x - cpp1.x, anchors[i].y - cpp1.y);
         let cp2 = createVector(anchors[i].x + cpp2.x, anchors[i].y + cpp2.y);
 

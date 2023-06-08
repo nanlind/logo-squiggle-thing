@@ -5,26 +5,28 @@ import "./canvas.js";
 import "./points.js";
 
 let canvas;
-let stepSize = 30;
+let stepSize = 30; // TODO : Rename to CAPS since its a constant
 
 let roundNum = 0;
 let numSteps = 2;
 
-let anchorP = [];
-let anchorP2 = [];
-let controlP2 = [];
-let controlP = [];
-let selects = [2];
+// ---------- Arrays
+
+let anchorP = [];   // Anchor points
+let controlP = [];  // Control points
+let anchorP2 = [];  // used in chainTranslation
+let controlP2 = []; // used in chainTranslation
+let selects = [2];  // Position of points that will lead translation
 let selectInfo = [];
-let newCoords = [];
+let newCoords = []; // New coordinates for nodes in selects[]. Same size as selects[]
 let reflectNodes = {
   start: 1,
   num: 5,
   newCoords: []
-};
-let pointer;
+}; // For reflect-translation - Not finished. 
+let pointer;        // Coordinates of brush (for drawing Squiggle) TODO:: Rename to brush
 
-// Serial I/O
+// -------- Serial I/O
 let port;
 let reader;
 let inputDone;
@@ -34,12 +36,14 @@ let textInput = "";
 let textInputLen = 0;
 let serialObjects = [];
 
+// ---------- Booleans
 let printAnchors = false;
 let doLinearTranslate = false;
 let doChainTranslate = false;
 let doReflect = false;
 let drawSquiggle = false;
 
+// -----------
 let squares = [];
 let squareSize = 60;
 
@@ -56,31 +60,20 @@ async function setup() {
   canvas = new Canvas(600, 600);
   bgImg = loadImage(canvas.backgroundImg[0]);
   createCanvas(canvas.x, canvas.y);
-
-  p = new Points();
-
-  // p.anchors = p.populateAnchorPoints(); //possibly dupe. Blir satt i Points-konstruktøren
-  anchorP = p.anchors; // TODO:: kan anchorP fjernes og p.anchors brukes i stedet?
-
-  // p.controls = p.calculateControlPoints(p.anchors);
-
-  // canvas = createVector(config.canvasSize.x, config.canvasSize.y);
-
-
-  // TODO:: Comment out what you dont use / what is successfully transferred
-  // useFixedAnchorPs();
-  anchorP2 = [...anchorP];
-  // getTangents(anchorP);
-  controlP2 = [...controlP];
-
   background(canvas.bgColor);
 
-  // Init new coordination points
+  p = new Points();
+  anchorP = p.anchors; // TODO:: kan anchorP fjernes og p.anchors brukes i stedet?
+
+  anchorP2 = [...anchorP];
+  controlP2 = [...controlP];
+
+  // Init new coordination points array
   selects.map(s => {
     newCoords.push(null);
   });
-  // TODO:: What does this do?
-  pointer = createVector(140, 140);
+
+  pointer = createVector(140, 140); // Set initial position for brush
 }
 
 
@@ -106,6 +99,8 @@ function draw() {
 
   getTangents(anchorP);
 
+  print(anchorP);
+
 
   if (!drawSquiggle) {
     // chainTranslateNodes(anchorP, 3);
@@ -115,6 +110,10 @@ function draw() {
     translateNodes();
     moveReflectNodes();
   }
+
+  // TODO:: FOrstå testene og hvorfor de utføres. evt om de kan forenkles. 
+  // TODO:: Når skulle anchorP være tom? Ved tegning start? 
+  // TODO:: endre denne til å sette arg. og så kalle på de tre funksjonene én gang med nysatte arg. 
   if (drawSquiggle && !!anchorP.length) {
     if (anchorP[anchorP.length - 1].x !== pointer.x || anchorP[anchorP.length - 1].y !== pointer.y) {
       let anchors = [...anchorP, pointer];
@@ -122,13 +121,13 @@ function draw() {
       drawInterpolations(anchors);
       drawOuterBorderRadius();
       drawControlPoints(anchors);
-    } else if (anchorP.length > 1) {
+    } else if (anchorP.length > 1) { // kan ikke denne fjernes og den andre settes som bare else? 
       // getTangents(anchorP);
       drawInterpolations(anchorP);
       drawOuterBorderRadius();
       drawControlPoints(anchorP);
     }
-  } else if (!drawSquiggle) {
+  } else if (!drawSquiggle) { // hvorfor gjenta !drawSquiggle? Blir ikke denne med uansett pga første kondisjon? 
     // getTangents(anchorP);
     drawInterpolations(anchorP);
     drawOuterBorderRadius();
@@ -141,12 +140,12 @@ function draw() {
 
 
   // if (!drawSquiggle) {
-  //   drawControlPoints();
+  // drawControlPoints();
   // }
   drawAnchorPs();
 
 
-  if (drawSquiggle) {
+  if (drawSquiggle) { // Kan denne flyttes opp? 
     showDrawingBrush();
   }
 
@@ -308,7 +307,12 @@ function dott(x, y) {
 // ---------------- CALCULATIONS ------------------
 // ------------------------------------------------
 
+// TODO:: Erstatte med funksjonen in Points-klassen
 function getTangents(anchors) {
+
+  if (anchors.length <= 1) {
+    return;
+  }
 
   controlP = [];
   let radiusFactor = 0.4;
@@ -994,7 +998,7 @@ function drawWithSensors() {
 
 // Replace with serial input
 function moveDrawPointer(direction) {
-  let stepSize = 20;
+  let stepSize = 20; // TODO:: Variere global konstant som heter drawStepSize
 
   switch (direction) {
     case 'u':
@@ -1104,6 +1108,7 @@ async function keyPressed() {
     console.log("drawSquiggle = true...");
 
 
+    /*
     console.log("opening port...");
     port = await navigator.serial.getPorts();
 
@@ -1112,6 +1117,7 @@ async function keyPressed() {
     //   port = port[0];
     // } else {
     // // Filter on devices with the Arduino Uno USB Vendor/Product IDs.
+
     const filters = [
       { usbVendorId: 0x2341, usbProductId: 0x0043 },
     ];
@@ -1139,7 +1145,7 @@ async function keyPressed() {
     readLoop();
 
     // // // // // // // // // // // 
-
+*/
 
     /*
     Ide til senere:
@@ -1150,17 +1156,23 @@ async function keyPressed() {
   if (key == 'd') {
     // draw done & jiggle / capture img
     drawSquiggle = false;
+
+    /* Uncomment when connected to arduino
     keepReading = false;
     if (port) {
       await port.close();
     }
-
+    */
     console.log("drawSquiggle = false...");
   }
 
   if (key == 's') {
     // draw done & jiggle / capture img
+    log(anchorP);
+    log(pointer.x);
+    log(pointer.y);
     anchorP.push(createVector(pointer.x, pointer.y));
+    log(anchorP);
     console.log("Pushed pointer to anchorP...");
   }
   if (key == '1') {
@@ -1185,7 +1197,9 @@ function isFalsy(isTrue) {
 //  Så er mulig løsning her: 
 //  https://gamedev.stackexchange.com/questions/5373/moving-ships-between-two-planets-along-a-bezier-missing-some-equations-for-acce
 
-
+function log(printMe) {
+  console.log(printMe);
+}
 function print(printMe) {
   console.log(printMe.toString());
 }
