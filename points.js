@@ -10,6 +10,14 @@ class Points {
     // this.coordinates
   }
 
+  setAnchorPoint(index, newValue) {
+    this.anchors[index] = newValue;
+  }
+
+  setAnchors(newAnchors) {
+    this.anchors = newAnchors;
+  }
+
   // These are set points that can be changed to your liking
   populateAnchorPoints() {
     let anchorPoints = [];

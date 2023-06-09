@@ -13,13 +13,27 @@ const SQUARE_SIZE = 60;
 
 // ---------- ARRAYS
 let anchorP = [];   // Anchor points
-let squares = [];
+let squares = [];   // Positions of all squares (anchors and interpolations)
 
-let selects = [2];  // Position of points that will lead translation
-let selectInfo = [];
+let brushPos;       // Vec2 - Coordinates of brush (for drawing Squiggle)
+
 let newCoords = []; // New coordinates for nodes in selects[]. Same size as selects[]
-
-let brushPos;        // Coordinates of brush (for drawing Squiggle) TODO:: Rename to brush
+let selects = [2];  // Index of nodes that will lead translation
+let selectInfo = [];// Objekt av type:
+/* 
+  {
+    id: number;
+    radius: number;
+    theta: number;
+    children: {
+      id: number;
+      radius: number;
+      theta: number;
+      weight: number;
+      }[],
+    stepSize: number;
+  }
+*/
 
 // -------- Serial I/O
 let port;
@@ -38,34 +52,29 @@ let drawSquiggle = false;
 // ----------- 
 let numSteps = 2; // Number of steps an arbitrary round consists of. 
 
-let stepz = 0;
-let stepzCount = 0;
-
 // objects
 let p;
 
-//  
 // ----------- Troubleshooting
 let printAnchors = false;
 let roundNum = 0; // Number of completed node travels
 
-
-// ----------- Experimental
+// ----------- Experimental ( i.e. Not working ) 
 let doChainTranslate = false;
 let anchorP2 = [];  // used in chainTranslation
 let controlP2 = []; // used in chainTranslation
+let chainSteps = 0;
+let chainStepCount = 0;
 
 let doReflect = false;
 let reflectNodes = {
   start: 1,
   num: 5,
   newCoords: []
-}; // For reflect-translation - Not finished. 
-
+};
 
 
 async function setup() {
-
   canvas = new Canvas(600, 600);
   bgImg = loadImage(canvas.backgroundImg[0]);
   createCanvas(canvas.x, canvas.y);
@@ -76,7 +85,7 @@ async function setup() {
   anchorP = p.anchors; // TODO:: kan anchorP fjernes og p.anchors brukes i stedet?
 
   anchorP2 = [...anchorP];
-  controlP2 = []; // controlP er tom her, så kanskje bare sette til tom array?
+  controlP2 = [];
 
   // Init new coordination points array
   selects.map(s => {
@@ -85,7 +94,6 @@ async function setup() {
 
   brushPos = createVector(140, 140); // Set initial position for brush
 }
-
 
 // ------------------------------------------------
 // ------------------ DRAW ------------------------
@@ -102,24 +110,16 @@ function draw() {
   background("#fff");
 
   // -------- -------- -------- -------- -------- -------- 
-
   if (!drawSquiggle) {
-
-    // -----------------------------  CHAIN TRANSLATION (NOT WORKING)
-    // [3, 2, 1, 0].map(n => {
-    //   chainTranslateNodes(anchorP, n);
-    // });
 
     translateNodes();
     moveReflectNodes();
     calculateAndShowSquiggle(anchorP);
 
-
     // TODO:: What does this do? Is it for the reflectNodes? 
     /*  
     fill(255);
     reflectNodes.newCoords.map(n => {
-
       circle(n.x, n.y, 7);
     });
 
@@ -133,7 +133,6 @@ function draw() {
     // drawWithSensors(textInput);
     showDrawingBrush();
 
-
     if (anchorP.length > 0) {
       const indexOfLastAnchor = anchorP.length - 1;
       const lastNodeNotEqualToBrushPosition = anchorP[indexOfLastAnchor].x !== brushPos.x || anchorP[indexOfLastAnchor].y !== brushPos.y;
@@ -146,11 +145,7 @@ function draw() {
         calculateAndShowSquiggle(anchorP);
       }
     }
-
-
   }
-
-
 }
 
 function calculateAndShowSquiggle(anchors) {
@@ -169,10 +164,9 @@ function calculateAndShowSquiggle(anchors) {
 
 }
 
-
 function showDrawingBrush() {
   noStroke();
-  fill(50);
+  fill(180);
   square(brushPos.x, brushPos.y, SQUARE_SIZE, 7);
   fill(230);
   circle(brushPos.x, brushPos.y, 6);
@@ -196,12 +190,9 @@ function moveReflectNodes() {
 
   // TODO:: Må gjøre doReflect til false et sted. 
   // For når du trykker på 'r' for andre gang mens 'p' er i gang så klikker hele greia
-
-
 }
 
 function getReflectCoords() {
-
   let end = reflectNodes.start + reflectNodes.num + 1;
   if (end > anchorP.length - 1) {
     end = anchorP.length - 1;
@@ -219,8 +210,6 @@ function getReflectCoords() {
   }
 
   reflectNodes.newCoords = n_reflected;
-
-
 }
 
 function collapsedMatrix(c, s, x, y, p) {
@@ -236,7 +225,6 @@ function collapsedMatrix(c, s, x, y, p) {
   let z_n = r3.dot(v2);
 
   return createVector(x_n, y_n);
-
 }
 
 
@@ -279,6 +267,8 @@ function drawControlPoints(anchors, controlPoints) {
 }
 
 function showAnchorPs() {
+
+
   for (let i = 0; i < anchorP.length; i++) {
     let x = anchorP[i].x;
     let y = anchorP[i].y;
@@ -658,21 +648,21 @@ function funkyFill(t) {
   } else {
     fill("#D7B377");
   }
-  fill(stepzCount * 10);
+  fill(chainStepCount * 10);
 }
 
 function chainTranslateNodes(anchorPoints, i, controlP) {
   if (!doChainTranslate) {
 
     let len = dist(anchorPoints[i].x, anchorPoints[i].y, anchorPoints[i + 1].x, anchorPoints[i + 1].y);
-    stepz = len / 1;
+    chainSteps = len / 1;
 
     return;
   }
 
   // stepz = len / stepSize;
 
-  let t = stepzCount / stepz;
+  let t = chainStepCount / chainSteps;
 
   // Rullere i positiv retning, ellers bytte + med - ? 
   let a1_x = anchorPoints[i].x;
@@ -691,8 +681,8 @@ function chainTranslateNodes(anchorPoints, i, controlP) {
   anchorP[i] = createVector(x, y);
 
 
-  if (stepzCount + 1 < stepz * 0.4) {
-    stepzCount++;
+  if (chainStepCount + 1 < chainSteps * 0.4) {
+    chainStepCount++;
   } else {
     doChainTranslate = false;
     return;
@@ -705,7 +695,7 @@ function translateNodes() {
   if (!doLinearTranslate) {
     return;
   }
-
+  //  TODO:: doLinearTranslate does not need to be checked below here 
   selectInfo.map(selected => {
     selected.radius = doLinearTranslate ? polarTranslate(anchorP, selected.id, selected.theta, selected.radius, 1, selected.stepSize) : 0;
 
@@ -714,10 +704,9 @@ function translateNodes() {
       return child;
     });
 
-    return selected;
+    return selected; // TODO:: Why return here? 
   });
   // selectInfo.map -> if r - stepsize = 0, i alt, doLinearTranslate = false (?)
-
 
   numSteps--;
 
