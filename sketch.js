@@ -4,12 +4,16 @@ import "./functions.js";
 import "./canvas.js";
 import "./points.js";
 
-let canvas;
-
 // ---------- CONTSTANTS
 const BRUSH_STEP_SIZE = 20;
 const TRANS_STEP_SIZE = 30;
 const SQUARE_SIZE = 60;
+const CANVAS_X = 700;
+const CANVAS_Y = 700;
+
+// TODO:: ---------------
+//  Add args to functions. Sørge for at globale verdier ikke brukes av alle funksjoner, men helst bare draw eller setup()
+// Etter det så kan du prøve å flytte til klasser
 
 // ---------- ARRAYS
 let anchorP = [];   // Anchor points
@@ -18,8 +22,9 @@ let squares = [];   // Positions of all squares (anchors and interpolations)
 let brushPos;       // Vec2 - Coordinates of brush (for drawing Squiggle)
 
 let newCoords = []; // New coordinates for nodes in selects[]. Same size as selects[]
-let selects = [2];  // Index of nodes that will lead translation
-let selectInfo = [];// Objekt av type:
+// TODO:: Can object array absorbe the number array?
+let activeNodes = [2];  // Index of nodes that will lead translation
+let activeNodeDetails = [];// Objekt av type:
 /* 
   {
     id: number;
@@ -49,8 +54,8 @@ let serialObjects = [];
 let doLinearTranslate = false;
 let drawSquiggle = false;
 
-// ----------- 
-let numSteps = 2; // Number of steps an arbitrary round consists of. 
+// -----------  
+let numSteps = 0; // Number of steps an arbitrary round consists of. 
 
 // objects
 let p;
@@ -75,9 +80,9 @@ let reflectNodes = {
 
 
 async function setup() {
-  canvas = new Canvas(600, 600);
+  let canvas = new Canvas(CANVAS_X, CANVAS_Y);
   bgImg = loadImage(canvas.backgroundImg[0]);
-  createCanvas(canvas.x, canvas.y);
+  createCanvas(CANVAS_X, CANVAS_Y);
   background(canvas.bgColor);
 
   // -------- -------- -------- -------- -------- -------- 
@@ -88,7 +93,7 @@ async function setup() {
   controlP2 = [];
 
   // Init new coordination points array
-  selects.map(s => {
+  activeNodes.map(s => {
     newCoords.push(null);
   });
 
@@ -111,9 +116,14 @@ function draw() {
 
   // -------- -------- -------- -------- -------- -------- 
   if (!drawSquiggle) {
-
-    translateNodes();
-    moveReflectNodes();
+    translateNodes(anchorP,
+      activeNodes,
+      activeNodeDetails,
+      newCoords,
+      numSteps,
+      roundNum,
+      doLinearTranslate);
+    // moveReflectNodes();
     calculateAndShowSquiggle(anchorP);
 
     // TODO:: What does this do? Is it for the reflectNodes? 
@@ -180,13 +190,13 @@ function moveReflectNodes() {
   doChainTranslate = false;
 
   let end = reflectNodes.start + reflectNodes.num + 1;
-  selects = [];
+  activeNodes = [];
   for (let i = reflectNodes.start + 1; i < end; i++) {
-    selects.push(i);
+    activeNodes.push(i);
   }
 
   newCoords = reflectNodes.newCoords;
-  selectInfo = constructNodes(anchorP, selects, newCoords);
+  activeNodeDetails = constructNodes(anchorP, activeNodes, newCoords);
 
   // TODO:: Må gjøre doReflect til false et sted. 
   // For når du trykker på 'r' for andre gang mens 'p' er i gang så klikker hele greia
@@ -273,7 +283,7 @@ function showAnchorPs() {
     let x = anchorP[i].x;
     let y = anchorP[i].y;
 
-    if (selects.includes(i)) {
+    if (activeNodes.includes(i)) {
       fill("yellow");
     } else {
       fill("blue");
@@ -689,67 +699,133 @@ function chainTranslateNodes(anchorPoints, i, controlP) {
   }
 
 }
-
-function translateNodes() {
-
+/**
+ * Global variables used
+ * roundNum
+ * numSteps
+ * doLinearTranslate
+ * newCoords
+ * updateSelectInfo
+ * selectInfo
+ * anchorP
+ * selected
+ */
+function translateNodes(
+  anchorPoints,
+  activeNodes,
+  activeNodeDetails,
+  newCoords,
+  numSteps,
+  roundNum,
+  doLinearTranslate
+) {
   if (!doLinearTranslate) {
     return;
   }
-  //  TODO:: doLinearTranslate does not need to be checked below here 
-  selectInfo.map(selected => {
-    selected.radius = doLinearTranslate ? polarTranslate(anchorP, selected.id, selected.theta, selected.radius, 1, selected.stepSize) : 0;
 
-    selected.children = selected.children.map(child => {
-      child.radius = doLinearTranslate ? polarTranslate(anchorP, child.id, child.theta, child.radius, child.weight, selected.stepSize * child.weight) : 0;
+  // if (numSteps <= 0) {
+  //   console.log(`Round #${roundNum}`);
+  //   roundNum++;
+
+  //   doLinearTranslate = false;
+
+  //   let [updatedActiveNodes, updatedNewCoords, updatedActiveNodeDetails] = updateSelectInfo(anchorPoints, activeNodes, newCoords);
+  //   sleep(100).then(doLinearTranslate = true);
+  // }
+  let anchorPoints_ = [...anchorPoints];
+
+  let [activeNodes_, newCoords_, activeNodeDetails_] = numSteps <= 0 ? roundIsComplete(roundNum, numSteps, anchorPoints, activeNodes, newCoords) : [activeNodes, newCoords, activeNodeDetails];
+
+  // puts values into selected
+  // TODO:: SJEKK FUNKSJONENE UNDER OG PASS PÅ AT TING RETURNERES OG GLOBALE VARIABLER IKKE ENDRES
+  activeNodeDetails_.map(activeNode => {
+    activeNode.radius = updateRadius(activeNode.radius, 1, activeNode.stepSize);
+    anchorPoints_[activeNode.id] = updateCoordAfterStep(anchorPoints[activeNode.id], theta, stepSize);
+
+    activeNode.children = activeNode.children.map(child => {
+      let childStepSize = activeNode.stepSize * child.weight;
+      child.radius = updateRadius(child.radius, child.weight, childStepSize);
+      anchorPoints_[idx] = updateCoordAfterStep(anchorPoints[child.id], child.theta, childStepSize);
       return child;
     });
 
-    return selected; // TODO:: Why return here? 
+    // selected.radius = polarTranslate(anchorPoints, selected.id, selected.theta, selected.radius, 1, selected.stepSize);
+    // selected.children = selected.children.map(child => {
+    //   child.radius = polarTranslate(anchorPoints, child.id, child.theta, child.radius, child.weight, selected.stepSize * child.weight);
+    //   return child;
+    // });
   });
-  // selectInfo.map -> if r - stepsize = 0, i alt, doLinearTranslate = false (?)
 
+  // selectInfo.map -> if r - stepsize = 0, i alt, doLinearTranslate = false (?)
   numSteps--;
 
-  if (numSteps <= 0) {
-    console.log(roundNum);
-    roundNum++;
+  return [activeNodes_, newCoords_, activeNodeDetails_, anchorPoints_];
+}
 
-    // removeElements();
-    doLinearTranslate = false;
+function updateCoordAfterStep(activeNodeCoord, theta, stepSize) {
 
-    // Starts a new round with random values
-    selects = getNewSelects();
-    newCoords = getRandomCoords();
+  let horizontalStep = activeNodeCoord.x + cos(theta) * stepSize;
+  let verticalStep = activeNodeCoord.y + sin(theta) * stepSize;
 
-    sleep(100).then(startNewRound);
+  return createVector(horizontalStep, verticalStep);
+}
 
+function updateRadius(r, weight, stepSize) {
+  return r - (stepSize * weight);
+}
+
+function roundIsComplete(roundNum, numSteps, anchorPoints, activeNodes, newCoords) {
+  console.log(`Round #${roundNum}`);
+  roundNum++;
+
+  doLinearTranslate = false;
+
+  let [updatedActiveNodes, updatedNewCoords, updatedActiveNodeDetails] = updateSelectInfo(anchorPoints, activeNodes, newCoords);
+
+  sleep(100).then(doLinearTranslate = true);
+
+  return [updatedActiveNodes, updatedNewCoords, updatedActiveNodeDetails];
+}
+
+
+
+
+function updateSelectInfo(anchorP) {
+  // Starts a new round with random values
+  let updatedActiveNodes = getNewSelects(anchorP.length);
+  let updatedNewCoords = getRandomCoords();
+  let updatedActiveNodeDetails;
+
+
+  // Run code below each time newCoord or selects change
+  if (updatedNewCoords.every(c => c !== undefined && c !== null)) {
+    updatedActiveNodeDetails = constructNodes(anchorP, updatedActiveNodes, updatedNewCoords);
+  } else {
+    console.log("Not all new coords are defined");
   }
+
+  // return activeNodes, newCoords
+  return [updatedActiveNodes, updatedNewCoords, updatedActiveNodeDetails];
 }
 
-function polarTranslate(anchorPoints, idx, theta, r, weight, stepSize) {
-
-  anchorPoints[idx].x += cos(theta) * stepSize;
-  anchorPoints[idx].y += sin(theta) * stepSize;
-
-  return r -= (stepSize * weight);
+function sleep(millisecondsDuration) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, millisecondsDuration);
+  });
 }
 
 
-function getNewSelects() {
-  let maxNodes = anchorP.length;
-  // let numSelected = random(1, 4);
-  let numSelected = random(1, maxNodes / 2);
-  let newSelected = [];
+function getNewSelects(numberOfNodes) {
+  let numberOfActiveNodes = random(1, numberOfNodes / 2);
+  let newActiveNodes = [];
 
-  for (let n = 0; n < numSelected; n++) {
-    let randomIndex = floor(random(maxNodes));
-    if (!arrIncludesElm(newSelected, randomIndex)) {
-      newSelected.push(randomIndex);
+  for (let n = 0; n < numberOfActiveNodes; n++) {
+    let randomNodeIndex = floor(random(numberOfNodes));
+    if (!newActiveNodes.includes(randomNodeIndex)) {
+      newActiveNodes.push(randomNodeIndex);
     }
   }
-
-  return newSelected;
-
+  return newActiveNodes;
 }
 
 function arrIncludesElm(arr, val) {
@@ -761,17 +837,15 @@ function getRandomCoords() {
   // let padding = 10;
   let padding = (SQUARE_SIZE / 2) + 10;
 
-  let maxWidth = canvas.x - padding;
-  let maxHeight = canvas.y - padding;
+  let maxWidth = CANVAS_X - padding;
+  let maxHeight = CANVAS_Y - padding;
 
   let center = 100;
-  let halfWidth = (canvas.x - center) / 2;
-  let halfHeight = (canvas.y - center) / 2;
+  let halfWidth = (CANVAS_X - center) / 2;
+  let halfHeight = (CANVAS_Y - center) / 2;
   // Choose random value and exclude center
 
-
-
-  return selects.map(s => {
+  return activeNodes.map(s => {
     let rWidth = [random(padding, halfWidth), random(maxWidth - halfWidth, maxWidth)];
     let rHeight = [random(padding, halfHeight), random(maxHeight - halfHeight, maxHeight)];
     // let r_width = round(random(padding, maxWidth));
@@ -783,6 +857,11 @@ function getRandomCoords() {
 
   });
 }
+
+
+
+
+
 
 
 function constructNodes(anchorPoints, selects, newPos) {
@@ -854,7 +933,7 @@ function getDiffCoord(current, next) {
 function constructChild(anchorPoints, p_idx, idxDiff, p_newCoord) {
   let childIdx = p_idx + idxDiff;
 
-  if (selects.some(s_idx => s_idx === childIdx)) {
+  if (activeNodes.some(s_idx => s_idx === childIdx)) {
     return;
   }
 
@@ -891,33 +970,16 @@ function constructChild(anchorPoints, p_idx, idxDiff, p_newCoord) {
 
 function calculateWeight(idxDiff, radius) {
   if (abs(idxDiff) === 1) {
-    return map(radius, 0, max(canvas.x, canvas.y), 0, 1);
+    return map(radius, 0, max(CANVAS_X, CANVAS_Y), 0, 1);
 
   } else if (abs(idxDiff) === 2) {
-    let maxDistance = sqrt(canvas.x * canvas.x + canvas.y * canvas.y);
+    let maxDistance = sqrt(CANVAS_X * CANVAS_X + CANVAS_Y * CANVAS_Y);
     return map(radius, 0, maxDistance, 0, 1);
 
   }
   return 0;
 }
 
-function sleep(millisecondsDuration) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, millisecondsDuration);
-  });
-}
-
-function startNewRound() {
-
-  doLinearTranslate = true;
-
-  // Run code below each time newCoord or selects change
-  if (newCoords.every(c => c !== undefined && c !== null)) {
-    selectInfo = constructNodes(anchorP, selects, newCoords);
-  } else {
-    console.log("Not all new coords are defined");
-  }
-}
 
 // ------------------------------------------------
 // ----------------- SERIAL I/O -------------------
@@ -1064,7 +1126,7 @@ async function keyPressed() {
     doLinearTranslate = true;
     // run this each time newCoord or selects change
     if (newCoords.every(c => c !== undefined && c !== null)) {
-      selectInfo = constructNodes(anchorP, selects, newCoords);
+      activeNodeDetails = constructNodes(anchorP, activeNodes, newCoords);
       doReflect = false;
 
     } else {
@@ -1085,7 +1147,7 @@ async function keyPressed() {
 
     doLinearTranslate = true;
     if (newCoords.every(c => c !== undefined && c !== null)) {
-      selectInfo = constructNodes(anchorP, selects, newCoords);
+      activeNodeDetails = constructNodes(anchorP, activeNodes, newCoords);
       doReflect = false;
 
     } else {
